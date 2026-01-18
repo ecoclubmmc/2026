@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Search, Filter, ArrowUpDown, Download, 
   Users, UserCheck, GraduationCap, Shield
@@ -8,6 +9,7 @@ import { UserProfile } from '../../types';
 
 export default function UserManager() {
   const { allUsers } = useData();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'admin' | 'secretary'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: keyof UserProfile; direction: 'asc' | 'desc' } | null>(null);
@@ -184,7 +186,7 @@ export default function UserManager() {
                   <div className="flex items-center gap-2">Role <ArrowUpDown className="w-3 h-3 opacity-50 group-hover:opacity-100" /></div>
                 </th>
                 <th className="p-4 text-center">Badges</th>
-                <th className="p-4 text-right">Join Date</th>
+                <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-sm text-slate-300">
@@ -243,9 +245,13 @@ export default function UserManager() {
                          <span className="text-slate-600">-</span>
                        )}
                     </td>
-                    <td className="p-4 text-right opacity-60 text-xs">
-                       Not Recorded
-                       {/* Join date not in UserProfile type yet, adding placeholder */}
+                    <td className="p-4 text-right">
+                       <button 
+                         onClick={() => navigate(`/profile/${user.uid}`)}
+                         className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg transition-colors text-xs font-bold"
+                       >
+                         View Profile
+                       </button>
                     </td>
                   </tr>
                 ))

@@ -40,6 +40,7 @@ type DataContextType = {
 
   deleteSecretary: (id: string) => Promise<void>;
   updateUserProfile: (uid: string, updates: Partial<UserProfile>) => Promise<void>;
+  deleteRegistration: (regId: string, userId: string, eventId: string) => Promise<void>;
 };
 
 export const DataContext = createContext<DataContextType>({} as any);
@@ -390,6 +391,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const deleteRegistration = async (regId: string, userId: string, eventId: string) => {
+    // 1. Delete from registrations collection
+    await deleteDoc(doc(db, "registrations", regId));
+
+    // 2. Update User Profile (Remove Badge and Event ID)
+    const userRef = doc(db, "users", userId);
+    const userSnap = await getDoc(userRef);
+    
+    if (userSnap.exists()) {
+      const userData = userSnap.data() as UserProfile;
+      // Remove all badges associated with this event
+      const updatedBadges = (userData.badges || []).filter(b => b.eventId !== eventId);
+      // Remove event from registeredEvents
+      const updatedRegisteredEvents = (userData.registeredEvents || []).filter(eid => eid !== eventId);
+      
+      await updateDoc(userRef, {
+        badges: updatedBadges,
+        registeredEvents: updatedRegisteredEvents
+      });
+    }
+  };
+
   // More aggressive timeout for loading state
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -414,7 +437,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   return (
     <DataContext.Provider value={{ 
       content, updateContent, events, addEvent, updateEvent, deleteEvent, 
-      registrations, registerForEvent, user, login, signup, logout, resetPassword, googleLogin, completeGoogleLogin, updateUserProfile, theme, setTheme, loading,
+      registrations, registerForEvent, deleteRegistration, user, login, signup, logout, resetPassword, googleLogin, completeGoogleLogin, updateUserProfile, theme, setTheme, loading,
       secretaries, addSecretary, updateSecretary, deleteSecretary, allUsers
     }}>
       {children}

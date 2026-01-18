@@ -67,7 +67,7 @@ function App() {
             <Route path="/field-visits" element={<EventsPage category="visit" title="Field Visits" />} />
             <Route path="/events/:id" element={<EventDetailPage />} />
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile/:uid?" element={<ProfilePage />} />
             <Route path="/admin" element={<AdminGuard><AdminDashboard /></AdminGuard>} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

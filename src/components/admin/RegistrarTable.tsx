@@ -1,10 +1,12 @@
 import { useContext, useState } from 'react';
-import { Search, FileSpreadsheet } from 'lucide-react';
+import { Search, FileSpreadsheet, Trash2, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { DataContext } from '../../context/DataContext';
 import ExcelJS from 'exceljs';
 
 export default function RegistrarTable() {
-  const { registrations, events } = useContext(DataContext);
+  const { registrations, events, deleteRegistration } = useContext(DataContext);
+  const navigate = useNavigate();
   const [filterEvent, setFilterEvent] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -67,6 +69,18 @@ export default function RegistrarTable() {
     document.body.removeChild(link);
   };
 
+  const handleDelete = async (reg: any) => {
+    if (window.confirm(`Are you sure you want to delete registration for ${reg.userName} in ${reg.eventTitle}? This will also remove the badge from their profile.`)) {
+      try {
+        await deleteRegistration(reg.id, reg.userId, reg.eventId);
+        // Note: registrations list updates automatically via context listener
+      } catch (err) {
+        console.error("Failed to delete", err);
+        alert("Failed to delete registration");
+      }
+    }
+  };
+
   return (
     <div className="bg-slate-900 rounded-xl shadow-lg border border-slate-800 overflow-hidden">
       <div className="p-6 border-b border-slate-800 flex flex-wrap gap-4 justify-between items-center bg-slate-800/50">
@@ -111,11 +125,12 @@ export default function RegistrarTable() {
               <th className="px-6 py-4">Event</th>
               <th className="px-6 py-4">Competition</th>
               <th className="px-6 py-4">Date</th>
+              <th className="px-6 py-4">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} className="p-8 text-center text-slate-500 italic">No records found</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-slate-500 italic">No records found</td></tr>
             ) : filtered.map(reg => (
               <tr key={reg.id} className="hover:bg-slate-800/50 transition-colors group">
                 <td className="px-6 py-4">
@@ -133,6 +148,22 @@ export default function RegistrarTable() {
                   {getValue(reg, ['competition', 'category', 'event'])}
                 </td>
                 <td className="px-6 py-4 text-slate-500">{new Date(reg.timestamp).toLocaleDateString()}</td>
+                <td className="px-6 py-4 flex items-center gap-2">
+                   <button 
+                     onClick={() => navigate(`/profile/${reg.userId}`)}
+                     className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors"
+                     title="View Profile"
+                   >
+                     <User className="w-4 h-4" />
+                   </button>
+                   <button 
+                     onClick={() => handleDelete(reg)}
+                     className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+                     title="Delete Registration"
+                   >
+                     <Trash2 className="w-4 h-4" />
+                   </button>
+                </td>
               </tr>
             ))}
           </tbody>

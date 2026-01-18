@@ -1,29 +1,47 @@
-import { useState, useContext } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useState, useContext, useEffect } from 'react';
+import { Navigate, useParams } from 'react-router-dom';
 import { DataContext } from '../context/DataContext';
 import HolographicBadge from '../components/HolographicBadge';
-import { DefaultAvatars } from '../types';
+import { DefaultAvatars, UserProfile } from '../types';
 import { Mail, Phone, Pencil, X, Check, Loader2 } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { user, updateUserProfile } = useContext(DataContext);
+  const { user, updateUserProfile, allUsers } = useContext(DataContext);
+  const { uid } = useParams();
   const [isEditing, setIsEditing] = useState(false);
+  
+  // Edit logic state
   const [editName, setEditName] = useState('');
   const [editMobile, setEditMobile] = useState('');
   const [editBatch, setEditBatch] = useState('');
   const [editAvatar, setEditAvatar] = useState('eco1');
   const [isSaving, setIsSaving] = useState(false);
 
+  // Determine which user to show
+  const [viewUser, setViewUser] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    if (uid && user?.role === 'admin') {
+      const found = allUsers.find(u => u.uid === uid);
+      if (found) setViewUser(found);
+    } else {
+      setViewUser(user);
+    }
+  }, [uid, user, allUsers]);
+
   if (!user) return <Navigate to="/login" />;
+  if (!viewUser) return <div className="min-h-screen pt-24 text-center text-white">Loading Profile...</div>;
+
+  const isOwnProfile = !uid || uid === user.uid;
 
   // Find the user's avatar
-  const userAvatar = DefaultAvatars.find(a => a.id === user.avatar) || DefaultAvatars[0];
+  const viewUserAvatar = DefaultAvatars.find(a => a.id === viewUser.avatar) || DefaultAvatars[0];
 
   const handleEditClick = () => {
-    setEditName(user.name);
-    setEditMobile(user.mobile || '');
-    setEditBatch(user.batch);
-    setEditAvatar(user.avatar || 'eco1');
+    setEditName(viewUser.name);
+    setEditMobile(viewUser.mobile || '');
+    setEditBatch(viewUser.batch);
+    setEditAvatar(viewUser.avatar || 'eco1');
     setIsEditing(true);
   };
 
@@ -31,13 +49,16 @@ export default function ProfilePage() {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await updateUserProfile(user.uid, {
-        name: editName,
-        mobile: editMobile,
-        batch: editBatch,
-        avatar: editAvatar
-      });
-      setIsEditing(false);
+      // Allow if own profile OR user is admin
+      if (isOwnProfile || user.role === 'admin') {
+        await updateUserProfile(viewUser.uid, {
+          name: editName,
+          mobile: editMobile,
+          batch: editBatch,
+          avatar: editAvatar
+        });
+        setIsEditing(false);
+      }
     } catch (err) {
       console.error("Failed to update profile", err);
       alert("Failed to update profile. Please try again.");
@@ -55,11 +76,12 @@ export default function ProfilePage() {
                 {/* Large Avatar Display */}
                 <div 
                   className="w-32 h-32 mx-auto rounded-full flex items-center justify-center text-6xl mb-4 shadow-lg ring-4 ring-white/10 bg-white/5"
-                  style={{ backgroundColor: userAvatar.color }}
+                  style={{ backgroundColor: viewUserAvatar.color }}
                 >
-                  {userAvatar.emoji}
+                  {viewUserAvatar.emoji}
                 </div>
                 
+                {(isOwnProfile || user.role === 'admin') && (
                 <button 
                   onClick={handleEditClick}
                   className="absolute top-8 right-8 p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors group"
@@ -67,14 +89,15 @@ export default function ProfilePage() {
                 >
                   <Pencil className="w-4 h-4 text-slate-400 group-hover:text-white" />
                 </button>
+                )}
                 
-                <h2 className="text-2xl font-bold text-white tracking-tight mb-1">{user.name}</h2>
+                <h2 className="text-2xl font-bold text-white tracking-tight mb-1">{viewUser.name}</h2>
                 <div className="flex items-center justify-center gap-2 mb-6">
                    <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                     <p className="text-emerald-400 font-bold text-[10px] uppercase tracking-widest">{user.role}</p>
+                     <p className="text-emerald-400 font-bold text-[10px] uppercase tracking-widest">{viewUser.role}</p>
                    </div>
                    <div className="px-3 py-1 bg-white/5 border border-white/10 rounded-full">
-                     <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">BATCH {user.batch}</p>
+                     <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">BATCH {viewUser.batch}</p>
                    </div>
                 </div>
 
@@ -86,7 +109,7 @@ export default function ProfilePage() {
                       </div>
                       <div className="overflow-hidden">
                         <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Email Address</p>
-                        <p className="text-sm font-medium text-white truncate" title={user.email}>{user.email}</p>
+                        <p className="text-sm font-medium text-white truncate" title={viewUser.email}>{viewUser.email}</p>
                       </div>
                    </div>
                    <div className="h-[1px] bg-white/5" />
@@ -96,7 +119,7 @@ export default function ProfilePage() {
                       </div>
                       <div>
                         <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Mobile Number</p>
-                        <p className="text-sm font-medium text-white">{user.mobile || 'Not set'}</p>
+                        <p className="text-sm font-medium text-white">{viewUser.mobile || 'Not set'}</p>
                       </div>
                    </div>
                 </div>
@@ -104,11 +127,11 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-2 gap-4 text-left">
                   <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-1">Badges</p>
-                     <p className="text-3xl font-bold text-white">{user.badges.filter(b => b.status === 'active').length}</p>
+                     <p className="text-3xl font-bold text-white">{viewUser.badges.filter(b => b.status === 'active').length}</p>
                   </div>
                   <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-1">Pending</p>
-                     <p className="text-3xl font-bold text-slate-300">{user.badges.filter(b => b.status === 'pending').length}</p>
+                     <p className="text-3xl font-bold text-slate-300">{viewUser.badges.filter(b => b.status === 'pending').length}</p>
                   </div>
                 </div>
              </div>
@@ -120,11 +143,11 @@ export default function ProfilePage() {
                  <span className="w-2 h-2 rounded-full bg-emerald-400" /> Achievements
               </h3>
               <div className="flex flex-wrap gap-3">
-                 {user.badges.map((badge, idx) => (
+                 {viewUser.badges.map((badge, idx) => (
                    <HolographicBadge key={idx} badge={badge} />
                  ))}
                  
-                 {user.badges.length === 0 && (
+                 {viewUser.badges.length === 0 && (
                    <div className="col-span-full py-12 text-center text-slate-400 bg-black/30 rounded-[2rem] border border-dashed border-white/10 font-bold text-sm uppercase tracking-wide">
                      NO BADGES EARNED
                    </div>

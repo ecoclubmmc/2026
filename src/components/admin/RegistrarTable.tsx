@@ -1,6 +1,7 @@
-import React, { useContext, useState } from 'react';
-import { Download, Search } from 'lucide-react';
+import { useContext, useState } from 'react';
+import { Search, FileSpreadsheet } from 'lucide-react';
 import { DataContext } from '../../context/DataContext';
+import ExcelJS from 'exceljs';
 
 export default function RegistrarTable() {
   const { registrations, events } = useContext(DataContext);
@@ -22,27 +23,45 @@ export default function RegistrarTable() {
     return '-';
   };
 
-  const exportCSV = () => {
-    const headers = ['Registration ID', 'User Name', 'Email', 'Batch', 'Event', 'Competition', 'Date', 'Details'];
-    const rows = filtered.map(r => [
-      r.id, 
-      r.userName, 
-      r.userEmail,
-      getValue(r, ['batch', 'year']),
-      r.eventTitle,
-      getValue(r, ['competition', 'category', 'event']), 
-      new Date(r.timestamp).toLocaleDateString(),
-      JSON.stringify(r.formData).replace(/"/g, '""') // Basic escape
-    ]);
-    
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + headers.join(",") + "\n" 
-      + rows.map(e => e.join(",")).join("\n");
-      
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "mmc_registrations.csv");
+  const exportExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Registrations');
+
+    sheet.columns = [
+       { header: 'Registration ID', key: 'id', width: 25 },
+       { header: 'User Name', key: 'userName', width: 20 },
+       { header: 'Email', key: 'userEmail', width: 25 },
+       { header: 'Mobile', key: 'mobile', width: 15 },
+       { header: 'Batch', key: 'batch', width: 10 },
+       { header: 'Event', key: 'event', width: 25 },
+       { header: 'Competition', key: 'competition', width: 20 },
+       { header: 'Date', key: 'date', width: 15 },
+       { header: 'Details', key: 'details', width: 30 }
+    ];
+
+    filtered.forEach(r => {
+      sheet.addRow({
+         id: r.id,
+         userName: r.userName,
+         userEmail: r.userEmail,
+         mobile: r.mobile || '-',
+         batch: getValue(r, ['batch', 'year']),
+         event: r.eventTitle,
+         competition: getValue(r, ['competition', 'category', 'event']),
+         date: new Date(r.timestamp).toLocaleDateString(),
+         details: JSON.stringify(r.formData)
+      });
+    });
+
+    // Style the header
+    sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } }; // Emerald 600
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'mmc_registrations.xlsx';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -75,10 +94,10 @@ export default function RegistrarTable() {
             {events.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
           </select>
           <button 
-            onClick={exportCSV}
-            className="flex items-center gap-2 px-4 py-2 bg-lime-600 text-white text-sm font-bold rounded-lg hover:bg-lime-500 transition-colors shadow-md"
+            onClick={exportExcel}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-500 transition-colors shadow-md"
           >
-            <Download className="w-4 h-4" /> Export CSV
+            <FileSpreadsheet className="w-4 h-4" /> Export Excel
           </button>
         </div>
       </div>
@@ -87,11 +106,11 @@ export default function RegistrarTable() {
           <thead className="bg-slate-800 text-slate-400 font-bold uppercase text-xs border-b border-slate-700">
             <tr>
               <th className="px-6 py-4">Student</th>
+              <th className="px-6 py-4">Mobile</th>
               <th className="px-6 py-4">Batch</th>
               <th className="px-6 py-4">Event</th>
               <th className="px-6 py-4">Competition</th>
               <th className="px-6 py-4">Date</th>
-              <th className="px-6 py-4">Form Data</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
@@ -104,22 +123,16 @@ export default function RegistrarTable() {
                   <div className="text-xs text-slate-500">{reg.userEmail}</div>
                 </td>
                 <td className="px-6 py-4 font-medium text-slate-300">
-                  {getValue(reg, ['batch', 'year'])}
+                  {reg.mobile || '-'}
+                </td>
+                <td className="px-6 py-4 font-medium text-slate-300">
+                  {reg.formData?.batch || getValue(reg, ['batch', 'year'])}
                 </td>
                 <td className="px-6 py-4 font-medium text-lime-400">{reg.eventTitle}</td>
                 <td className="px-6 py-4 font-medium text-slate-300">
                   {getValue(reg, ['competition', 'category', 'event'])}
                 </td>
                 <td className="px-6 py-4 text-slate-500">{new Date(reg.timestamp).toLocaleDateString()}</td>
-                <td className="px-6 py-4">
-                  <div className="flex flex-wrap gap-1">
-                    {Object.entries(reg.formData).map(([k, v]) => (
-                      <span key={k} className="px-2 py-1 bg-slate-800 rounded text-xs text-slate-400 border border-slate-700">
-                        {k}: {String(v)}
-                      </span>
-                    ))}
-                  </div>
-                </td>
               </tr>
             ))}
           </tbody>

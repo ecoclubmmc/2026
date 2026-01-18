@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
-  collection, doc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc 
+  collection, doc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc, getDoc 
 } from 'firebase/firestore';
 import { 
   onAuthStateChanged, signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, signOut, updateProfile 
+  createUserWithEmailAndPassword, signOut, updateProfile,
+  sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup 
 } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '../firebase';
@@ -15,24 +16,30 @@ import {
 
 type DataContextType = {
   content: SiteContent;
-  updateContent: (path: string, value: any) => Promise<void>;
+  updateContent: (updates: Partial<SiteContent>) => Promise<void>;
   events: Event[];
   addEvent: (evt: Event) => Promise<void>;
   updateEvent: (id: string, updates: Partial<Event>) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
   registrations: Registration[];
+  allUsers: UserProfile[]; // Added for Admin Stats
   registerForEvent: (eventId: string, formData: any) => Promise<void>;
   user: UserProfile | null;
   login: (email: string, pass: string) => Promise<void>;
-  signup: (email: string, pass: string, name: string, batch: string, avatar: string) => Promise<void>;
+  signup: (email: string, pass: string, name: string, batch: string, avatar: string, mobile: string) => Promise<void>;
   logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  googleLogin: () => Promise<{ user: any; isNewUser: boolean; needsCompletion: boolean }>;
+  completeGoogleLogin: (uid: string, data: { name: string; mobile: string; batch: string; avatar: string; email: string }) => Promise<void>;
   theme: Theme;
   setTheme: (t: Theme) => void;
   loading: boolean;
   secretaries: Secretary[];
   addSecretary: (sec: Secretary) => Promise<void>;
   updateSecretary: (id: string, updates: Partial<Secretary>) => Promise<void>;
+
   deleteSecretary: (id: string) => Promise<void>;
+  updateUserProfile: (uid: string, updates: Partial<UserProfile>) => Promise<void>;
 };
 
 export const DataContext = createContext<DataContextType>({} as any);
@@ -46,6 +53,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [events, setEvents] = useState<Event[]>([]);
   const [secretaries, setSecretaries] = useState<Secretary[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [theme, setTheme] = useState<Theme>({ primaryColor: '#10b981', secondaryColor: '#06b6d4' });
   const [loading, setLoading] = useState(true);
@@ -55,7 +63,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // 1. Content Sync
     const contentUnsub = onSnapshot(doc(db, "site_content", "main"), (snapshot) => {
       if (snapshot.exists()) {
-        setContent(snapshot.data() as SiteContent);
+        const data = snapshot.data();
+        // Merge with default content to ensure new fields (like socialLinks) exist
+        setContent({ ...DEFAULT_CONTENT, ...data } as SiteContent);
       } else {
         // Initialize if missing
         setDoc(doc(db, "site_content", "main"), DEFAULT_CONTENT);
@@ -79,34 +89,55 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return () => { contentUnsub(); eventsUnsub(); secretariesUnsub(); };
   }, []);
 
-  // 4. Registrations Sync
+  // 4. Registrations & Users Sync (Admin Only)
   useEffect(() => {
     if (user?.role === 'admin') {
       const regUnsub = onSnapshot(collection(db, "registrations"), (snapshot) => {
         const loadedRegs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Registration));
         setRegistrations(loadedRegs);
       });
-      return () => regUnsub();
+      
+      const usersUnsub = onSnapshot(collection(db, "users"), (snapshot) => {
+        const loadedUsers = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+        setAllUsers(loadedUsers);
+      });
+
+      return () => { regUnsub(); usersUnsub(); };
     } else {
       setRegistrations([]);
+      setAllUsers([]);
     }
   }, [user?.role]);
 
   // --- Actions ---
-  const updateContent = async (path: string, value: any) => {
-    // Optimistic update
-    setContent(prev => ({ ...prev, [path]: value }));
-    // DB Update
-    await setDoc(doc(db, "site_content", "main"), { [path]: value }, { merge: true });
+  const updateContent = async (updates: Partial<SiteContent>) => {
+    console.log("DataContext: Attempting to update content:", updates);
+    try {
+      // Optimistic update
+      setContent(prev => ({ ...prev, ...updates }));
+      // DB Update
+      const docRef = doc(db, "site_content", "main");
+      await setDoc(docRef, updates, { merge: true });
+      console.log("DataContext: Successfully wrote to site_content/main");
+    } catch (e: any) {
+      console.error("DataContext: Failed to update content:", e);
+      if (e.code === 'permission-denied') {
+        alert("Permission Denied: You do not have admin rights to edit this content.");
+      } else {
+        alert("Error saving settings to database. Check console for details.");
+      }
+    }
   };
 
   const addEvent = async (evt: Event) => {
-    const { id, ...eventData } = evt;
+    const { id: _, ...eventData } = evt; // Destructure id to exclude it
     await addDoc(collection(db, "events"), eventData);
   };
 
   const updateEvent = async (id: string, updates: Partial<Event>) => {
-    await updateDoc(doc(db, "events", id), updates);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id: _, ...data } = updates;
+    await updateDoc(doc(db, "events", id), data);
   };
   
   const deleteEvent = async (id: string) => {
@@ -115,7 +146,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const addSecretary = async (sec: Secretary) => {
     // Explicitly destructure to ensure we only save what we intend
-    const { id, name, role, image, description, order } = sec;
+    const { name, role, image, description, order } = sec;
     const dataToSave = { name, role, image, description, order };
     
     console.log("DataContext: Saving secretary to Firestore:", dataToSave);
@@ -165,7 +196,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                 role: "student",
                 badges: [],
                 batch: "2024",
-                avatar: "eco1"
+                avatar: "eco1",
+                department: "",
+                year: "",
+                registeredEvents: []
               });
             }
           });
@@ -188,7 +222,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     await signInWithEmailAndPassword(auth, email, pass);
   };
 
-  const signup = async (email: string, pass: string, name: string, batch: string, avatar: string) => {
+  const signup = async (email: string, pass: string, name: string, batch: string, avatar: string, mobile: string) => {
     const res = await createUserWithEmailAndPassword(auth, email, pass);
     if (res.user) {
       // Update Auth Profile
@@ -202,7 +236,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         role: 'student', // Default role
         badges: [],
         batch: batch,
-        avatar: avatar
+        mobile: mobile,
+        avatar: avatar,
+        department: '', // Default empty, can be updated in profile
+        year: '',       // Default empty
+        registeredEvents: []
       };
       
       await setDoc(doc(db, "users", res.user.uid), newUserProfile);
@@ -211,6 +249,103 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await signOut(auth);
+  };
+
+  const resetPassword = async (email: string) => {
+    await sendPasswordResetEmail(auth, email);
+  };
+
+  const googleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const res = await signInWithPopup(auth, provider);
+      
+      const docRef = doc(db, "users", res.user.uid);
+      const docSnap = await getDoc(docRef);
+
+      const exists = docSnap.exists();
+      const data = exists ? docSnap.data() : null;
+      
+      // Check if profile exists but is incomplete (missing mobile or batch is default)
+      const isIncomplete = exists && (!data?.mobile || data?.batch === "2024");
+
+      return { 
+        user: res.user, 
+        isNewUser: !exists,
+        needsCompletion: !exists || isIncomplete
+      };
+    } catch (e) {
+      console.error("Google Sign In Error:", e);
+      throw e;
+    }
+  };
+
+  const completeGoogleLogin = async (uid: string, data: { name: string; mobile: string; batch: string; avatar: string; email: string }) => {
+    const docRef = doc(db, "users", uid);
+    
+
+
+    // If it's a completely new user, we want defaults. 
+    // If it's an update, we don't want to reset role.
+    // The safest way is to read first? We can assume we are "completing" so we set these specific fields.
+    // But for a NEW user, we need 'role': 'student'.
+    
+    // Let's just use setDoc with merge, but include defaults ONLY if they don't exist?
+    // Firestore merge doesn't support "set if missing" easily without a read.
+    // BUT we know completeGoogleLogin is called for BOTH new and incomplete users.
+    
+    // Let's assume 'student' is safe default for anyone going through this flow.
+    // (Admins wouldn't be fixing their incomplete profile this way usually, or if they do, role might be reset).
+    
+    // Better approach: Check if it exists strictly inside here? 
+    // Or just pass "isNew" flag?
+    
+    // Let's just set the defaults. If an admin logs in and has no mobile, their role might become student.
+    // That's a risk. 
+    // Let's read the doc again or rely on merge behavior.
+    
+    // Actually, simply NOT sending 'role' fits "merge". 
+    // BUT for a new user, 'role' will be missing!
+    
+    // Solution: Get the doc first.
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) {
+       // New User - Set full defaults
+       const newUser: UserProfile = {
+         uid,
+         name: data.name,
+         email: data.email,
+         role: 'student',
+         badges: [],
+         batch: data.batch,
+         avatar: data.avatar,
+         mobile: data.mobile,
+         department: "",
+         year: "",
+         registeredEvents: []
+       };
+       await setDoc(docRef, newUser);
+    } else {
+       // Existing User - Just update specific fields
+       await setDoc(docRef, {
+         name: data.name,
+         mobile: data.mobile,
+         batch: data.batch,
+         avatar: data.avatar,
+         // We do NOT touch role or badges
+       }, { merge: true });
+    }
+  };
+
+  const updateUserProfile = async (uid: string, updates: Partial<UserProfile>) => {
+    try {
+      const docRef = doc(db, "users", uid);
+      await setDoc(docRef, updates, { merge: true });
+      console.log("DataContext: User profile updated successfully");
+    } catch (e) {
+      console.error("DataContext: Error updating user profile:", e);
+      throw e;
+    }
   };
 
   const registerForEvent = async (eventId: string, formData: any) => {
@@ -227,24 +362,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       eventId,
       eventTitle: event.title,
       timestamp: new Date().toISOString(),
-      formData
+      formData,
+      mobile: user.mobile || '' // Added mobile number
     };
     
     await addDoc(collection(db, "registrations"), newRegData);
 
-    // 2. Add Badge to User
+    // 2. Add Badge & Update Registered Events
     const newBadge: Badge = {
       id: Math.random().toString(36).substr(2, 9),
       eventId,
       name: event.badgeName,
-      image: event.badgeImage,
+      emoji: event.badgeEmoji, // Updated field
       status: 'pending'
     };
     
     // Safety check if user.badges is undefined
     const currentBadges = user.badges || [];
     const updatedBadges = [...currentBadges, newBadge];
-    await updateDoc(doc(db, "users", user.uid), { badges: updatedBadges });
+    
+    const currentRegisteredEvents = user.registeredEvents || [];
+    const updatedRegisteredEvents = [...currentRegisteredEvents, eventId];
+
+    await updateDoc(doc(db, "users", user.uid), { 
+      badges: updatedBadges,
+      registeredEvents: updatedRegisteredEvents
+    });
   };
 
   // More aggressive timeout for loading state
@@ -271,8 +414,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   return (
     <DataContext.Provider value={{ 
       content, updateContent, events, addEvent, updateEvent, deleteEvent, 
-      registrations, registerForEvent, user, login, signup, logout, theme, setTheme, loading,
-      secretaries, addSecretary, updateSecretary, deleteSecretary
+      registrations, registerForEvent, user, login, signup, logout, resetPassword, googleLogin, completeGoogleLogin, updateUserProfile, theme, setTheme, loading,
+      secretaries, addSecretary, updateSecretary, deleteSecretary, allUsers
     }}>
       {children}
     </DataContext.Provider>

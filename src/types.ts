@@ -26,19 +26,20 @@ export type Event = {
   venue: string;
   description: string;
   image: string; // Thumbnail/Card image
-  badgeImage: string; // Emoji or URL
+  badgeEmoji: string; // Emoji
   badgeName: string;
   formFields: FormField[];
   coverImage?: string; // Event cover photo
   galleries?: string[]; // Event photo gallery
   competitions?: Competition[]; // Competition options with links
+  rules?: string[]; // Event rules
 };
 
 export type Badge = {
   id: string;
   eventId: string;
   name: string;
-  image: string;
+  emoji: string;
   status: 'locked' | 'pending' | 'active';
   unlockedAt?: string;
 };
@@ -47,9 +48,13 @@ export type UserProfile = {
   uid: string;
   name: string;
   email: string;
-  role: 'student' | 'admin';
+  department: string;
+  year: string;
+  mobile?: string; // Added mobile number
+  role: 'student' | 'admin' | 'secretary';
   badges: Badge[];
-  batch: string; // 4-digit year (e.g., "2022")
+  batch: string; // Restoring batch
+  registeredEvents: string[]; // Array of event IDs
   avatar: string; // Avatar ID
 };
 
@@ -75,17 +80,27 @@ export type SiteContent = {
   aboutSubtitle: string;
   works: { title: string; desc: string; icon: string }[];
   favicon?: string;
+  socialLinks?: {
+    whatsapp: string;
+    instagram: string;
+  };
+  backgroundImage?: string;
 };
 
 export const DEFAULT_CONTENT: SiteContent = {
-  heroTitle: "Loading...",
+  heroTitle: "",
   heroSubtitle: "",
   history: "",
   mission: "",
   aboutTitle: "Our Mission",
   aboutSubtitle: "Empowering the next generation of environmental leaders at Madras Medical College.",
   works: [],
-  favicon: ""
+  favicon: "",
+  socialLinks: {
+    whatsapp: "",
+    instagram: ""
+  },
+  backgroundImage: ""
 };
 
 // Default avatar options for user profiles

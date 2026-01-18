@@ -1,8 +1,9 @@
 import { useContext, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Edit3, Trash2, Image, Award, ExternalLink } from 'lucide-react';
+import { Plus, Edit3, Trash2, ExternalLink } from 'lucide-react';
 import { DataContext } from '../../context/DataContext';
 import { Event } from '../../types';
+import ImageUploader from '../ImageUploader';
 
 export default function EventManager() {
   const { events, addEvent, updateEvent, deleteEvent } = useContext(DataContext);
@@ -10,7 +11,7 @@ export default function EventManager() {
   const [editId, setEditId] = useState<string | null>(null);
   const [newEvent, setNewEvent] = useState<Partial<Event>>({
     title: '', date: '', description: '', formFields: [], venue: '', coverImage: '', competitions: [], galleries: [],
-    badgeName: '', badgeImage: '' 
+    badgeName: '', badgeEmoji: '', rules: []
   });
 
   const handleSave = async () => {
@@ -21,14 +22,15 @@ export default function EventManager() {
       description: newEvent.description || 'Description',
       image: newEvent.coverImage || 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09',
       coverImage: newEvent.coverImage,
-      badgeImage: newEvent.badgeImage || '🌟',
+      badgeEmoji: newEvent.badgeEmoji || '🌟',
       badgeName: newEvent.badgeName || 'Star Participant',
       category: newEvent.category || 'general',
       formFields: newEvent.formFields?.length ? newEvent.formFields : [
         { id: 'batch', label: 'Batch', type: 'text' as const, required: true }
       ],
       competitions: newEvent.competitions || [],
-      galleries: newEvent.galleries || []
+      galleries: newEvent.galleries || [],
+      rules: newEvent.rules || []
     };
 
     if (editId) {
@@ -43,7 +45,7 @@ export default function EventManager() {
 
     setIsCreating(false);
     setEditId(null);
-    setNewEvent({ title: '', date: '', description: '', formFields: [], venue: '', coverImage: '', competitions: [], galleries: [], badgeName: '', badgeImage: '' });
+    setNewEvent({ title: '', date: '', description: '', formFields: [], venue: '', coverImage: '', competitions: [], galleries: [], badgeName: '', badgeEmoji: '', rules: [] });
   };
 
   const startEdit = (evt: Event) => {
@@ -55,7 +57,7 @@ export default function EventManager() {
   const cancelEdit = () => {
     setIsCreating(false);
     setEditId(null);
-    setNewEvent({ title: '', date: '', description: '', formFields: [], venue: '', coverImage: '', competitions: [], galleries: [], badgeName: '', badgeImage: '' });
+    setNewEvent({ title: '', date: '', description: '', formFields: [], venue: '', coverImage: '', competitions: [], galleries: [], badgeName: '', badgeEmoji: '', rules: [] });
   };
 
   return (
@@ -118,28 +120,27 @@ export default function EventManager() {
           
           <div className="grid md:grid-cols-2 gap-4">
              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  <Image className="w-3 h-3 inline mr-1" />
-                  Cover Image URL
-                </label>
-                <input 
-                  placeholder="https://example.com/image.jpg"
-                  value={newEvent.coverImage}
-                  className="w-full p-3 bg-slate-900 rounded-lg border border-slate-700 focus:border-lime-500 text-white outline-none text-sm placeholder-slate-500"
-                  onChange={e => setNewEvent({...newEvent, coverImage: e.target.value})}
+                <ImageUploader 
+                  label="Cover Image"
+                  folder="events/covers"
+                  currentImage={newEvent.coverImage}
+                  onImageUploaded={(url) => setNewEvent({...newEvent, coverImage: url})}
                 />
              </div>
              <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">
-                  <Award className="w-3 h-3 inline mr-1" />
-                  Badge Image URL
+                  Badge Emoji
                 </label>
-                <input 
-                  placeholder="https://example.com/badge.png"
-                  value={newEvent.badgeImage}
-                  className="w-full p-3 bg-slate-900 rounded-lg border border-slate-700 focus:border-lime-500 text-white outline-none text-sm placeholder-slate-500"
-                  onChange={e => setNewEvent({...newEvent, badgeImage: e.target.value})}
-                />
+                <div className="flex items-center gap-4">
+                   <input 
+                      value={newEvent.badgeEmoji || ''}
+                      placeholder="🏆"
+                      className="w-full p-3 bg-slate-900 rounded-lg border border-slate-700 focus:border-lime-500 text-white outline-none text-2xl text-center"
+                      onChange={e => setNewEvent({...newEvent, badgeEmoji: e.target.value})}
+                      maxLength={2}
+                   />
+                   <div className="text-4xl bg-slate-800 p-2 rounded-xl">{newEvent.badgeEmoji || '❓'}</div>
+                </div>
              </div>
           </div>
 
@@ -208,6 +209,22 @@ export default function EventManager() {
           </div>
 
           <div>
+             <label className="block text-xs font-medium text-slate-400 mb-1">
+                Event Rules (one per line)
+             </label>
+             <textarea 
+                placeholder="- No plastic usage&#10;- Bring your own water bottle"
+                value={newEvent.rules?.join('\n') || ''}
+                rows={4}
+                className="w-full p-3 bg-slate-900 rounded-lg border border-slate-700 focus:border-lime-500 text-white outline-none text-sm placeholder-slate-500"
+                onChange={e => setNewEvent({
+                   ...newEvent, 
+                   rules: e.target.value.split('\n').filter(line => line.trim() !== '')
+                })}
+             />
+          </div>
+
+          <div>
             <label className="block text-xs font-medium text-slate-400 mb-1">
               Gallery Images (comma-separated URLs)
             </label>
@@ -247,7 +264,7 @@ export default function EventManager() {
                   {event.date} • {event.venue || 'No venue'} • {event.competitions?.length || 0} competitions
                 </p>
                 <div className="flex items-center gap-2 mt-1">
-                   {event.badgeImage && <img src={event.badgeImage} className="w-4 h-4 rounded-full" alt="Badge" />}
+                   <span className="text-lg">{event.badgeEmoji}</span>
                    <span className="text-[10px] text-lime-400 uppercase tracking-widest">{event.badgeName}</span>
                 </div>
               </div>

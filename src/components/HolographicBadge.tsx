@@ -20,7 +20,7 @@ export default function HolographicBadge({ badge }: { badge: Badge }) {
   return (
     <motion.div
       style={{ perspective: 1000 }}
-      className="relative w-32 h-40 group"
+      className="relative w-24 h-32 group"
       onMouseMove={handleMouse}
       onMouseLeave={() => { x.set(0); y.set(0); }}
     >

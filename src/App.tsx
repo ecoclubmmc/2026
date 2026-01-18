@@ -1,6 +1,6 @@
 import { useContext, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { DataProvider, DataContext } from './context/DataContext';
+import { DataContext } from './context/DataContext';
 import NavBar from './components/NavBar';
 import HomePage from './pages/HomePage';
 import AboutPage from './pages/AboutPage';
@@ -31,9 +31,18 @@ function FaviconUpdater() {
   return null;
 }
 
+
 function App() {
+  const { content } = useContext(DataContext);
+  
+  // Force ignore the old green background (Unsplash) if it comes from DB
+  const isUnsplash = content?.backgroundImage?.includes('unsplash.com');
+  const activeBg = (content?.backgroundImage && !isUnsplash) 
+    ? content.backgroundImage 
+    : ""; // No default background
+
   return (
-    <DataProvider>
+    <>
       <FaviconUpdater />
       <Router>
         <div className="font-sans text-white min-h-screen selection:bg-emerald-500 selection:text-white transition-colors duration-300 relative">
@@ -41,8 +50,9 @@ function App() {
           <div 
              className="fixed inset-0 z-[-1] bg-cover bg-center bg-no-repeat"
              style={{ 
-               backgroundImage: 'url("https://images.unsplash.com/photo-1472214103451-9374bd1c798e?q=80&w=2070&auto=format&fit=crop")',
-               backgroundAttachment: 'fixed' // Ensures compatibility if browser supports it
+               backgroundImage: activeBg ? `url("${activeBg}")` : 'none',
+               backgroundColor: '#000', // Fallback color
+               backgroundAttachment: 'fixed' 
              }}
           />
           {/* Global Overlay for readability */}
@@ -63,7 +73,7 @@ function App() {
           </Routes>
         </div>
       </Router>
-    </DataProvider>
+    </>
   );
 }
 

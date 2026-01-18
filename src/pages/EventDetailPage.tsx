@@ -1,4 +1,4 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Calendar, MapPin, ArrowLeft, Image as ImageIcon, X, Check } from 'lucide-react';
 import { DataContext } from '../context/DataContext';
@@ -27,10 +27,19 @@ export default function EventDetailPage() {
 
   const isPast = new Date(event.date) < new Date();
 
+  // Auto-fill mobile from user profile
+  useEffect(() => {
+    if (user?.mobile) {
+      setMobileNumber(user.mobile);
+    }
+  }, [user]);
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!mobileNumber) {
-      alert('Mobile number is required');
+    
+    // Strict Mobile Validation
+    if (!/^\d{10}$/.test(mobileNumber)) {
+      alert('Mobile number must be exactly 10 digits');
       return;
     }
     
@@ -47,7 +56,6 @@ export default function EventDetailPage() {
         competition: selectedCompetition
     });
     setIsSubmitting(false);
-    setShowRegister(false);
     
     // Determine WhatsApp link
     let link = '';
@@ -56,12 +64,12 @@ export default function EventDetailPage() {
        if (comp) link = comp.whatsappLink;
     }
     
+    // UI Feedback instead of just closing
+    alert("Registration Successful! Please join the WhatsApp group if prompted.");
     if (link) {
       window.open(link, '_blank');
-      alert('Successfully registered! Redirecting to WhatsApp group...');
-    } else {
-      alert('Successfully registered!');
     }
+    setShowRegister(false);
   };
 
   return (
@@ -147,12 +155,18 @@ export default function EventDetailPage() {
               </div>
               
               {!isPast && (
-                <button 
-                  onClick={() => { setShowRegister(true); setMobileNumber(''); setSelectedCompetition(''); }}
-                  className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold text-lg hover:bg-emerald-500 transition-all shadow-lg hover:shadow-emerald-500/20 active:scale-95 border border-emerald-500/50"
-                >
-                  Register Now
-                </button>
+                 user?.registeredEvents?.includes(event.id) ? (
+                   <div className="w-full py-4 bg-emerald-500/20 text-emerald-400 rounded-xl font-bold text-lg border border-emerald-500/30 flex items-center justify-center gap-2">
+                     <Check className="w-5 h-5" /> Registered
+                   </div>
+                 ) : (
+                   <button 
+                     onClick={() => { setShowRegister(true); setMobileNumber(''); setSelectedCompetition(''); }}
+                     className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold text-lg hover:bg-emerald-500 transition-all shadow-lg hover:shadow-emerald-500/20 active:scale-95 border border-emerald-500/50"
+                   >
+                     Register Now
+                   </button>
+                 )
               )}
               
               {isPast && (
@@ -160,7 +174,24 @@ export default function EventDetailPage() {
                    Registration Closed
                  </button>
               )}
-           </div>
+            </div>
+           
+           {/* Rules Card */}
+           {!isPast && event.rules && event.rules.length > 0 && (
+             <div className="bg-rose-500/10 backdrop-blur-md p-8 rounded-[2rem] shadow-sm border border-rose-500/20">
+               <h3 className="text-lg font-bold text-rose-400 mb-4 uppercase tracking-widest flex items-center gap-2">
+                 ⚠️ Rules & Info
+               </h3>
+               <ul className="space-y-3">
+                 {event.rules.map((rule, i) => (
+                   <li key={i} className="flex items-start gap-3 text-slate-300 text-sm">
+                     <span className="text-rose-500 mt-1">•</span>
+                     {rule}
+                   </li>
+                 ))}
+               </ul>
+             </div>
+           )}
 
            {/* Competitions Card */}
            {event.competitions && event.competitions.length > 0 && (
@@ -183,11 +214,7 @@ export default function EventDetailPage() {
              <div className="relative z-10">
                <p className="text-emerald-400 text-xs font-bold uppercase tracking-widest mb-2">EARN A BADGE</p>
                <div className="my-6 flex justify-center transform hover:scale-110 transition-transform duration-500 cursor-default">
-                 {event.badgeImage?.startsWith('http') ? (
-                    <img src={event.badgeImage} className="w-24 h-24 object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]" alt="Badge" />
-                 ) : (
-                    <div className="text-7xl">{event.badgeImage || '🌟'}</div>
-                 )}
+                  <div className="text-7xl drop-shadow-[0_0_15px_rgba(16,185,129,0.3)]">{event.badgeEmoji || '🌟'}</div>
                </div>
                <h3 className="text-xl font-bold mb-1">{event.badgeName}</h3>
                <p className="text-slate-400 text-sm">Participate to unlock!</p>

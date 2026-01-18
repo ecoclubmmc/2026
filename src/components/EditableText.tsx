@@ -21,7 +21,7 @@ export default function EditableText({ value, contentKey, onSave, tag = 'p', cla
     if (onSave) {
       onSave(tempValue);
     } else if (contentKey) {
-      updateContent(contentKey, tempValue);
+      updateContent({ [contentKey]: tempValue });
     }
     setIsEditing(false);
   };

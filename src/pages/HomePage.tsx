@@ -5,6 +5,7 @@ import { Award, Users, Leaf, ArrowUpRight, Clock, Eye } from 'lucide-react';
 import { DataContext } from '../context/DataContext';
 import HeroDesign from '../components/HeroDesign';
 import EditableText from '../components/EditableText';
+import QuickStats from '../components/QuickStats';
 
 export default function HomePage() {
   const { content, events } = useContext(DataContext);
@@ -64,14 +65,19 @@ export default function HomePage() {
            </div>
         </div>
 
-        {/* Divider / Title Module - Spans 12 Cols */}
+        {/* Divider / Title Module */}
         <div className="lg:col-span-12 py-8 flex items-center gap-4">
            <div className="h-[1px] bg-white/20 flex-1" />
-           <span className="font-bold text-white/50 text-sm tracking-widest uppercase">Legacy & Mission</span>
+           <span className="font-bold text-white/50 text-sm tracking-widest uppercase">Our Impact & Legacy</span>
            <div className="h-[1px] bg-white/20 flex-1" />
         </div>
 
-        {/* History - Spans 6 */}
+        {/* Quick Stats - Spans 12 Cols */}
+        <div className="lg:col-span-12">
+            <QuickStats />
+        </div>
+
+        {/* Vision - Spans 6 */}
         <div className="lg:col-span-6 bg-black/40 backdrop-blur-md rounded-[2.5rem] p-8 md:p-10 border border-white/10 hover:border-white/20 transition-all">
              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center mb-6">
                 <Eye className="w-6 h-6 text-emerald-400" />

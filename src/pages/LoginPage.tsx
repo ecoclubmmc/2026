@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, ArrowRight } from 'lucide-react';
 import { DataContext } from '../context/DataContext';
 import { DefaultAvatars } from '../types';
+import DatabaseSetup from '../components/DatabaseSetup';
 
 export default function LoginPage() {
   const { login, signup } = useContext(DataContext);
@@ -157,6 +158,7 @@ export default function LoginPage() {
            </button>
         </div>
       </div>
+      <DatabaseSetup />
     </div>
   );
 }

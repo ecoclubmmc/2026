@@ -6,6 +6,12 @@
   font-family: 'Inter', sans-serif;
 }
 
+html,
+body {
+  background-color: #0f172a;
+  overscroll-behavior-y: none;
+}
+
 .glass {
   background: rgba(255, 255, 255, 0.25);
   backdrop-filter: blur(12px);

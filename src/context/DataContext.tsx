@@ -1,17 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  collection, doc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc, getDoc 
+import {
+  collection, doc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc, getDoc
 } from 'firebase/firestore';
-import { 
-  onAuthStateChanged, signInWithEmailAndPassword, 
+import {
+  onAuthStateChanged, signInWithEmailAndPassword,
   createUserWithEmailAndPassword, signOut, updateProfile,
-  sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup 
+  sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup
 } from 'firebase/auth';
 import { Loader2 } from 'lucide-react';
 import { db, auth } from '../firebase';
-import { 
-  SiteContent, Event, Secretary, Registration, UserProfile, 
-  Theme, DEFAULT_CONTENT, Badge 
+import {
+  SiteContent, Event, Secretary, Registration, UserProfile,
+  Theme, DEFAULT_CONTENT, Badge
 } from '../types';
 
 type DataContextType = {
@@ -40,12 +40,13 @@ type DataContextType = {
 
   deleteSecretary: (id: string) => Promise<void>;
   updateUserProfile: (uid: string, updates: Partial<UserProfile>) => Promise<void>;
+  deleteRegistration: (id: string) => Promise<void>;
 };
 
 export const DataContext = createContext<DataContextType>({} as any);
 
 export function useData() {
-    return useContext(DataContext);
+  return useContext(DataContext);
 }
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
@@ -91,22 +92,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // 4. Registrations & Users Sync (Admin Only)
   useEffect(() => {
+    let regUnsub: (() => void) | undefined;
+    let usersUnsub: (() => void) | undefined;
+
     if (user?.role === 'admin') {
-      const regUnsub = onSnapshot(collection(db, "registrations"), (snapshot) => {
+      regUnsub = onSnapshot(collection(db, "registrations"), (snapshot) => {
         const loadedRegs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Registration));
         setRegistrations(loadedRegs);
       });
-      
-      const usersUnsub = onSnapshot(collection(db, "users"), (snapshot) => {
+
+      usersUnsub = onSnapshot(collection(db, "users"), (snapshot) => {
         const loadedUsers = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
         setAllUsers(loadedUsers);
       });
-
-      return () => { regUnsub(); usersUnsub(); };
     } else {
       setRegistrations([]);
       setAllUsers([]);
     }
+
+    return () => {
+      if (regUnsub) regUnsub();
+      if (usersUnsub) usersUnsub();
+    };
   }, [user?.role]);
 
   // --- Actions ---
@@ -139,7 +146,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const { id: _, ...data } = updates;
     await updateDoc(doc(db, "events", id), data);
   };
-  
+
   const deleteEvent = async (id: string) => {
     await deleteDoc(doc(db, "events", id));
   };
@@ -148,7 +155,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // Explicitly destructure to ensure we only save what we intend
     const { name, role, image, description, order } = sec;
     const dataToSave = { name, role, image, description, order };
-    
+
     console.log("DataContext: Saving secretary to Firestore:", dataToSave);
     try {
       const docRef = await addDoc(collection(db, "secretaries"), dataToSave);
@@ -170,19 +177,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // --- Auth Handlers ---
   useEffect(() => {
     let userUnsub: (() => void) | null = null;
-    
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       // Clean up previous user listener
       if (userUnsub) {
         userUnsub();
         userUnsub = null;
       }
-      
+
       if (currentUser) {
         // Set up real-time listener for user profile
         try {
           const docRef = doc(db, "users", currentUser.uid);
-          
+
           // Use onSnapshot for real-time updates
           userUnsub = onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -211,12 +218,57 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
       setLoading(false);
     });
-    
+
     return () => {
       unsubscribe();
       if (userUnsub) userUnsub();
     };
   }, []);
+
+  // --- Badge Activation Logic ---
+  useEffect(() => {
+    if (!user || !events.length) return;
+
+    const checkBadges = async () => {
+      const now = new Date();
+      let hasChanges = false;
+      const updatedBadges = user.badges.map(badge => {
+        if (badge.status === 'pending') {
+          const event = events.find(e => e.id === badge.eventId);
+          if (event) {
+            const eventDate = new Date(event.date);
+            // Activate if event has passed (or is today? "after the day of the event" -> typically next day or strictly >)
+            // Let's assume end of event day. Using simple date comparison: if now > eventDate (where eventDate is usually 00:00 of that day).
+            // If event is "2026-10-10", param is 10th oct 00:00.
+            // If now is 11th oct, it is passed.
+            // If now is 10th oct 10pm, it is > eventDate.
+            // User said "activated only after the day of the event".
+            // Maybe `now > new Date(eventDate.getTime() + 86400000)`?
+            // Let's stick to simple "is in past".
+            if (now > eventDate) {
+              hasChanges = true;
+              return { ...badge, status: 'active' as const };
+            }
+          }
+        }
+        return badge;
+      });
+
+      if (hasChanges) {
+        try {
+          console.log("Activating badges for user:", user.uid);
+          await updateDoc(doc(db, "users", user.uid), { badges: updatedBadges });
+        } catch (err) {
+          console.error("Error activating badges:", err);
+        }
+      }
+    };
+
+    checkBadges();
+  }, [user?.badges, events]); // Dependency on badges deep check might trigger loop? 
+  // user.badges is a new array ref on every user update.
+  // If I update doc -> user updates -> badges new ref -> effect runs.
+  // But hasChanges will be false. So no update. Loop breaks. Safe.
 
   const login = async (email: string, pass: string) => {
     await signInWithEmailAndPassword(auth, email, pass);
@@ -242,7 +294,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         year: '',       // Default empty
         registeredEvents: []
       };
-      
+
       await setDoc(doc(db, "users", res.user.uid), newUserProfile);
     }
   };
@@ -259,18 +311,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       const provider = new GoogleAuthProvider();
       const res = await signInWithPopup(auth, provider);
-      
+
       const docRef = doc(db, "users", res.user.uid);
       const docSnap = await getDoc(docRef);
 
       const exists = docSnap.exists();
       const data = exists ? docSnap.data() : null;
-      
+
       // Check if profile exists but is incomplete (missing mobile or batch is default)
       const isIncomplete = exists && (!data?.mobile || data?.batch === "2024");
 
-      return { 
-        user: res.user, 
+      return {
+        user: res.user,
         isNewUser: !exists,
         needsCompletion: !exists || isIncomplete
       };
@@ -282,58 +334,58 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const completeGoogleLogin = async (uid: string, data: { name: string; mobile: string; batch: string; avatar: string; email: string }) => {
     const docRef = doc(db, "users", uid);
-    
+
 
 
     // If it's a completely new user, we want defaults. 
     // If it's an update, we don't want to reset role.
     // The safest way is to read first? We can assume we are "completing" so we set these specific fields.
     // But for a NEW user, we need 'role': 'student'.
-    
+
     // Let's just use setDoc with merge, but include defaults ONLY if they don't exist?
     // Firestore merge doesn't support "set if missing" easily without a read.
     // BUT we know completeGoogleLogin is called for BOTH new and incomplete users.
-    
+
     // Let's assume 'student' is safe default for anyone going through this flow.
     // (Admins wouldn't be fixing their incomplete profile this way usually, or if they do, role might be reset).
-    
+
     // Better approach: Check if it exists strictly inside here? 
     // Or just pass "isNew" flag?
-    
+
     // Let's just set the defaults. If an admin logs in and has no mobile, their role might become student.
     // That's a risk. 
     // Let's read the doc again or rely on merge behavior.
-    
+
     // Actually, simply NOT sending 'role' fits "merge". 
     // BUT for a new user, 'role' will be missing!
-    
+
     // Solution: Get the doc first.
     const docSnap = await getDoc(docRef);
     if (!docSnap.exists()) {
-       // New User - Set full defaults
-       const newUser: UserProfile = {
-         uid,
-         name: data.name,
-         email: data.email,
-         role: 'student',
-         badges: [],
-         batch: data.batch,
-         avatar: data.avatar,
-         mobile: data.mobile,
-         department: "",
-         year: "",
-         registeredEvents: []
-       };
-       await setDoc(docRef, newUser);
+      // New User - Set full defaults
+      const newUser: UserProfile = {
+        uid,
+        name: data.name,
+        email: data.email,
+        role: 'student',
+        badges: [],
+        batch: data.batch,
+        avatar: data.avatar,
+        mobile: data.mobile,
+        department: "",
+        year: "",
+        registeredEvents: []
+      };
+      await setDoc(docRef, newUser);
     } else {
-       // Existing User - Just update specific fields
-       await setDoc(docRef, {
-         name: data.name,
-         mobile: data.mobile,
-         batch: data.batch,
-         avatar: data.avatar,
-         // We do NOT touch role or badges
-       }, { merge: true });
+      // Existing User - Just update specific fields
+      await setDoc(docRef, {
+        name: data.name,
+        mobile: data.mobile,
+        batch: data.batch,
+        avatar: data.avatar,
+        // We do NOT touch role or badges
+      }, { merge: true });
     }
   };
 
@@ -348,9 +400,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteRegistration = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "registrations", id));
+      console.log("DataContext: Registration deleted:", id);
+    } catch (e) {
+      console.error("DataContext: Error deleting registration:", e);
+      throw e;
+    }
+  };
+
   const registerForEvent = async (eventId: string, formData: any) => {
     if (!user) return;
-    
+
     const event = events.find(e => e.id === eventId);
     if (!event) return;
 
@@ -363,31 +425,42 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       eventTitle: event.title,
       timestamp: new Date().toISOString(),
       formData,
-      mobile: user.mobile || '' // Added mobile number
+      mobile: formData.mobile || user.mobile || '',
+      batch: formData.batch || user.batch || ''
     };
-    
+
     await addDoc(collection(db, "registrations"), newRegData);
 
-    // 2. Add Badge & Update Registered Events
+    // 2. Add Badge & Update Registered Events & Update Profile Data
     const newBadge: Badge = {
       id: Math.random().toString(36).substr(2, 9),
       eventId,
       name: event.badgeName,
-      emoji: event.badgeEmoji, // Updated field
+      emoji: event.badgeEmoji,
       status: 'pending'
     };
-    
-    // Safety check if user.badges is undefined
+
     const currentBadges = user.badges || [];
     const updatedBadges = [...currentBadges, newBadge];
-    
+
     const currentRegisteredEvents = user.registeredEvents || [];
     const updatedRegisteredEvents = [...currentRegisteredEvents, eventId];
 
-    await updateDoc(doc(db, "users", user.uid), { 
+    const userUpdates: any = {
       badges: updatedBadges,
       registeredEvents: updatedRegisteredEvents
-    });
+    };
+
+    // Auto-update profile with missing details
+    if (formData.mobile && (!user.mobile || user.mobile !== formData.mobile)) {
+      userUpdates.mobile = formData.mobile;
+    }
+    if (formData.batch && (!user.batch || user.batch !== formData.batch)) {
+      userUpdates.batch = formData.batch;
+    }
+
+    await updateDoc(doc(db, "users", user.uid), userUpdates);
+
   };
 
   // More aggressive timeout for loading state
@@ -396,7 +469,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (loading) {
         setLoading(false);
       }
-    }, 2000); 
+    }, 2000);
     return () => clearTimeout(timeout);
   }, [loading]);
 
@@ -412,10 +485,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <DataContext.Provider value={{ 
-      content, updateContent, events, addEvent, updateEvent, deleteEvent, 
+    <DataContext.Provider value={{
+      content, updateContent, events, addEvent, updateEvent, deleteEvent,
       registrations, registerForEvent, user, login, signup, logout, resetPassword, googleLogin, completeGoogleLogin, updateUserProfile, theme, setTheme, loading,
-      secretaries, addSecretary, updateSecretary, deleteSecretary, allUsers
+      secretaries, addSecretary, updateSecretary, deleteSecretary, allUsers, deleteRegistration
     }}>
       {children}
     </DataContext.Provider>

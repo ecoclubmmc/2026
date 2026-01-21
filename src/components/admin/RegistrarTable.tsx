@@ -1,10 +1,10 @@
 import { useContext, useState } from 'react';
-import { Search, FileSpreadsheet } from 'lucide-react';
+import { Search, FileSpreadsheet, Trash2 } from 'lucide-react';
 import { DataContext } from '../../context/DataContext';
 import ExcelJS from 'exceljs';
 
 export default function RegistrarTable() {
-  const { registrations, events } = useContext(DataContext);
+  const { registrations, events, deleteRegistration } = useContext(DataContext);
   const [filterEvent, setFilterEvent] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -28,28 +28,28 @@ export default function RegistrarTable() {
     const sheet = workbook.addWorksheet('Registrations');
 
     sheet.columns = [
-       { header: 'Registration ID', key: 'id', width: 25 },
-       { header: 'User Name', key: 'userName', width: 20 },
-       { header: 'Email', key: 'userEmail', width: 25 },
-       { header: 'Mobile', key: 'mobile', width: 15 },
-       { header: 'Batch', key: 'batch', width: 10 },
-       { header: 'Event', key: 'event', width: 25 },
-       { header: 'Competition', key: 'competition', width: 20 },
-       { header: 'Date', key: 'date', width: 15 },
-       { header: 'Details', key: 'details', width: 30 }
+      { header: 'Registration ID', key: 'id', width: 25 },
+      { header: 'User Name', key: 'userName', width: 20 },
+      { header: 'Email', key: 'userEmail', width: 25 },
+      { header: 'Mobile', key: 'mobile', width: 15 },
+      { header: 'Batch', key: 'batch', width: 10 },
+      { header: 'Event', key: 'event', width: 25 },
+      { header: 'Competition', key: 'competition', width: 20 },
+      { header: 'Date', key: 'date', width: 15 },
+      { header: 'Details', key: 'details', width: 30 }
     ];
 
     filtered.forEach(r => {
       sheet.addRow({
-         id: r.id,
-         userName: r.userName,
-         userEmail: r.userEmail,
-         mobile: r.mobile || '-',
-         batch: getValue(r, ['batch', 'year']),
-         event: r.eventTitle,
-         competition: getValue(r, ['competition', 'category', 'event']),
-         date: new Date(r.timestamp).toLocaleDateString(),
-         details: JSON.stringify(r.formData)
+        id: r.id,
+        userName: r.userName,
+        userEmail: r.userEmail,
+        mobile: r.mobile || '-',
+        batch: getValue(r, ['batch', 'year']),
+        event: r.eventTitle,
+        competition: getValue(r, ['competition', 'category', 'event']),
+        date: new Date(r.timestamp).toLocaleDateString(),
+        details: JSON.stringify(r.formData)
       });
     });
 
@@ -67,6 +67,16 @@ export default function RegistrarTable() {
     document.body.removeChild(link);
   };
 
+  const handleDelete = async (id: string, name: string) => {
+    if (window.confirm(`Are you sure you want to delete the registration for "${name}"? This cannot be undone.`)) {
+      try {
+        await deleteRegistration(id);
+      } catch (error) {
+        alert('Failed to delete registration');
+      }
+    }
+  };
+
   return (
     <div className="bg-slate-900 rounded-xl shadow-lg border border-slate-800 overflow-hidden">
       <div className="p-6 border-b border-slate-800 flex flex-wrap gap-4 justify-between items-center bg-slate-800/50">
@@ -77,23 +87,23 @@ export default function RegistrarTable() {
         <div className="flex gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input 
-              type="text" 
-              placeholder="Search Name..." 
+            <input
+              type="text"
+              placeholder="Search Name..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:border-lime-500 outline-none w-48 placeholder-slate-500"
             />
           </div>
-          <select 
-            value={filterEvent} 
+          <select
+            value={filterEvent}
             onChange={(e) => setFilterEvent(e.target.value)}
             className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:border-lime-500 outline-none"
           >
             <option value="">All Events</option>
             {events.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
           </select>
-          <button 
+          <button
             onClick={exportExcel}
             className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-500 transition-colors shadow-md"
           >
@@ -111,11 +121,12 @@ export default function RegistrarTable() {
               <th className="px-6 py-4">Event</th>
               <th className="px-6 py-4">Competition</th>
               <th className="px-6 py-4">Date</th>
+              <th className="px-6 py-4 text-center">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} className="p-8 text-center text-slate-500 italic">No records found</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-slate-500 italic">No records found</td></tr>
             ) : filtered.map(reg => (
               <tr key={reg.id} className="hover:bg-slate-800/50 transition-colors group">
                 <td className="px-6 py-4">
@@ -133,6 +144,15 @@ export default function RegistrarTable() {
                   {getValue(reg, ['competition', 'category', 'event'])}
                 </td>
                 <td className="px-6 py-4 text-slate-500">{new Date(reg.timestamp).toLocaleDateString()}</td>
+                <td className="px-6 py-4 text-center">
+                  <button
+                    onClick={() => handleDelete(reg.id, reg.userName)}
+                    className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+                    title="Delete Registration"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

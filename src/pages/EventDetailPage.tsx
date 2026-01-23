@@ -155,17 +155,28 @@ export default function EventDetailPage() {
             </div>
 
             {!isPast && (
-              user?.registeredEvents?.includes(event.id) ? (
-                <div className="w-full py-4 bg-emerald-500/20 text-emerald-400 rounded-xl font-bold text-lg border border-emerald-500/30 flex items-center justify-center gap-2">
-                  <Check className="w-5 h-5" /> Registered
-                </div>
-              ) : (
+              event.competitions && event.competitions.length > 0 ? (
+                // If event has competitions, always show register button (users can register for multiple competitions)
                 <button
                   onClick={() => { setShowRegister(true); setMobileNumber(user?.mobile || ''); setSelectedCompetition(''); }}
                   className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold text-lg hover:bg-emerald-500 transition-all shadow-lg hover:shadow-emerald-500/20 active:scale-95 border border-emerald-500/50"
                 >
-                  Register Now
+                  {user?.registeredEvents?.includes(event.id) ? 'Register for Another Competition' : 'Register Now'}
                 </button>
+              ) : (
+                // If no competitions, show registered state if already registered
+                user?.registeredEvents?.includes(event.id) ? (
+                  <div className="w-full py-4 bg-emerald-500/20 text-emerald-400 rounded-xl font-bold text-lg border border-emerald-500/30 flex items-center justify-center gap-2">
+                    <Check className="w-5 h-5" /> Registered
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setShowRegister(true); setMobileNumber(user?.mobile || ''); setSelectedCompetition(''); }}
+                    className="w-full py-4 bg-emerald-600 text-white rounded-xl font-bold text-lg hover:bg-emerald-500 transition-all shadow-lg hover:shadow-emerald-500/20 active:scale-95 border border-emerald-500/50"
+                  >
+                    Register Now
+                  </button>
+                )
               )
             )}
 
